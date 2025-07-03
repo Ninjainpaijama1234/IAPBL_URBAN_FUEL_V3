@@ -1,0 +1,15 @@
+streamlit
+pandas
+numpy
+scikit-learn
+matplotlib
+seaborn
+plotly
+altair
+mlxtend
+networkx
+statsmodels
+python-dateutil
+# Optional extras (silently skipped if not installed)
+xgboost  ; platform_machine != 'arm64'    # skip on M1 mac default build
+prophet  ; sys_platform != 'win32'        # Prophet wheels for Linux/mac
