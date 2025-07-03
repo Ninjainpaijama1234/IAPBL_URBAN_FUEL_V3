@@ -236,29 +236,50 @@ with tab_exp:
     else:
         charts.append(style(px.scatter(title="N/A"), "Violin N/A"))
 
-    # 8. Parallel categories – condensed & guarded
-    def top_k(s, k=4):
-        vals = s.value_counts(dropna=False).nlargest(k).index
-        return s.where(s.isin(vals), other="Other")
+    # 8. Insight: Customer-journey Sankey (diet → cuisine → cook role) ──
+    if all(c in df.columns for c in ["dietary_goals", "favorite_cuisines", "primary_cook"]):
+        # Prepare link data
+        sankey_df = (
+            df[["dietary_goals", "favorite_cuisines", "primary_cook"]]
+            .dropna()
+        )
+        # Build node list
+        all_nodes = (
+            sankey_df["dietary_goals"]
+            .astype(str)
+            .tolist()
+            + sankey_df["favorite_cuisines"].astype(str).tolist()
+            + sankey_df["primary_cook"].astype(str).tolist()
+        )
+        labels = list(dict.fromkeys(all_nodes))  # preserve order, unique
+        idx = {label: i for i, label in enumerate(labels)}
 
-    if all(c in df.columns for c in ["dietary_goals", "favorite_cuisines", "meal_type_pref", "primary_cook", "healthy_importance_rating"]):
-        pc = df[["dietary_goals", "favorite_cuisines", "meal_type_pref", "primary_cook", "healthy_importance_rating"]].copy()
-        for col in ["dietary_goals", "favorite_cuisines", "meal_type_pref", "primary_cook"]:
-            pc[col] = top_k(pc[col].astype(str), 4)
-        par_fig = px.parallel_categories(
-            pc,
-            dimensions=["dietary_goals", "favorite_cuisines", "meal_type_pref", "primary_cook"],
-            color="healthy_importance_rating",
-            color_continuous_scale=px.colors.sequential.Viridis,
+        # Count flows
+        def make_links(src, tgt):
+            pairs = sankey_df.groupby([src, tgt]).size().reset_index(name="count")
+            return [
+                dict(source=idx[s], target=idx[t], value=int(v))
+                for s, t, v in zip(pairs[src], pairs[tgt], pairs["count"])
+            ]
+
+        links1 = make_links("dietary_goals", "favorite_cuisines")
+        links2 = make_links("favorite_cuisines", "primary_cook")
+        sankey_fig = go.Figure(
+            go.Sankey(
+                node=dict(label=labels, pad=15, thickness=15),
+                link=links1 + links2,
+            )
         )
-        par_fig.update_layout(
-            title="Diet → Cuisine → Meal-type → Cook role",
-            height=500, margin=dict(l=30, r=30, t=60, b=30), font=dict(size=14),
-            coloraxis_colorbar=dict(title="Health score")
+        sankey_fig.update_layout(
+            title_text="Customer journey: Diet → Cuisine → Cook role",
+            font=dict(size=12),
+            height=500,
+            margin=dict(l=20, r=20, t=40, b=20),
         )
-        charts.append(style(par_fig, "Parallel categories"))
+        charts.append(style(sankey_fig, "Customer-journey Sankey"))
     else:
-        charts.append(style(px.scatter(title="N/A"), "Parallel categories N/A"))
+        charts.append(style(px.scatter(title="N/A"), "Customer-journey Sankey N/A"))
+
 
     # 9. 3-D lifestyle cube
     if all(c in df.columns for c in ["work_hours_per_day", "commute_minutes", "dinners_cooked_per_week"]):
@@ -347,20 +368,28 @@ with tab_exp:
     else:
         charts.append(style(px.scatter(title="N/A"), "Commute dist N/A"))
 
-    # 20. Scatter-matrix of core numerics
-    dims = [c for c in ["age","income_inr","commute_minutes","work_hours_per_day"] if c in df.columns]
+    # 20. Insight: High-density scatter-matrix of key numerics
+    dims = [c for c in ["age", "income_inr", "commute_minutes", "work_hours_per_day"] if c in df.columns]
     if len(dims) >= 2:
-        charts.append(style(px.scatter_matrix(df, dimensions=dims, color="gender" if "gender" in df.columns else None), "Scatter-matrix"))
+        sm = px.scatter_matrix(
+            df,
+            dimensions=dims,
+            color="gender" if "gender" in df.columns else None,
+        )
+        # Smaller points, lower opacity for clarity
+        sm.update_traces(
+            diagonal_visible=False,
+            marker=dict(size=3, opacity=0.5),
+        )
+        sm.update_layout(
+            title="Pairwise relationships (dense view)",
+            height=500,
+            margin=dict(l=20, r=20, t=40, b=20),
+        )
+        charts.append(style(sm, "Pairwise relationships"))
     else:
-        charts.append(style(px.scatter(title="N/A"), "Scatter-matrix N/A"))
+        charts.append(style(px.scatter(title="N/A"), "Pairwise relationships N/A"))
 
-    # ── Render in 2-column grid ─────────────────────────────────
-    for i in range(0, len(charts), 2):
-        cols = st.columns(2)
-        for j, fig in enumerate(charts[i:i+2]):
-            with cols[j]:
-                st.markdown(f"**Insight {i+j+1}**")
-                st.plotly_chart(fig, use_container_width=True)
 
     # ── Business Takeaways ─────────────────────────────────────
     with st.expander("💡 Business Takeaways"):
